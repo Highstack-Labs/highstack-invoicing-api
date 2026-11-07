@@ -36,7 +36,7 @@ async function bootstrap() {
   // ===== SEGURIDAD: CORS restringido =====
   const allowedOriginsStr = configService.get<string>(
     'cors.allowedOrigins',
-    'http://localhost:3000,http://localhost:3001',
+    'http://localhost:3000,http://localhost:3001,http://localhost:4200',
   );
   const allowedOrigins = allowedOriginsStr.split(',').map((o) => o.trim());
 
