@@ -196,9 +196,11 @@ export class CertificateController {
   @ApiBody({
     schema: {
       type: 'object',
+      required: ['cert', 'password', 'ruc'],
       properties: {
         cert: { type: 'string', format: 'binary' },
         password: { type: 'string' },
+        ruc: { type: 'string', example: '0924383631001' },
       },
     },
   })
