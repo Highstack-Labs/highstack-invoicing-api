@@ -48,12 +48,12 @@ export class IdentificacionValidatorService {
       };
     }
 
-    // Validar código de provincia (01-24)
+    // Validar código de provincia (01-24 o 30 para ecuatorianos en el exterior)
     const provincia = parseInt(cedula.substring(0, 2), 10);
-    if (provincia < 1 || provincia > 24) {
+    if ((provincia < 1 || provincia > 24) && provincia !== 30) {
       return {
         valido: false,
-        error: `Código de provincia ${provincia} inválido (debe ser 01-24)`,
+        error: `Código de provincia ${provincia} inválido (debe ser 01-24 o 30)`,
       };
     }
 
@@ -107,12 +107,12 @@ export class IdentificacionValidatorService {
       };
     }
 
-    // Validar código de provincia
+    // Validar código de provincia (01-24 o 30)
     const provincia = parseInt(ruc.substring(0, 2), 10);
-    if (provincia < 1 || provincia > 24) {
+    if ((provincia < 1 || provincia > 24) && provincia !== 30) {
       return {
         valido: false,
-        error: `Código de provincia ${provincia} inválido (debe ser 01-24)`,
+        error: `Código de provincia ${provincia} inválido (debe ser 01-24 o 30)`,
       };
     }
 

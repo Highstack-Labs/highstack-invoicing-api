@@ -26,6 +26,7 @@ import { PdfModule } from '../pdf/pdf.module';
 import { TemplateModule } from '../template/template.module';
 import { SriEmisionProcessor } from './processors/sri-emision.processor';
 import { RideService } from './services/ride.service';
+import { ContribuyenteCatastroService } from './services/contribuyente-catastro.service';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { RideService } from './services/ride.service';
     CatalogoValidatorService,
     SriEmisionProcessor,
     RideService,
+    ContribuyenteCatastroService,
   ],
   exports: [
     SriService,
@@ -72,6 +74,7 @@ import { RideService } from './services/ride.service';
     SriSoapFactoryService,
     CatalogoValidatorService,
     RideService,
+    ContribuyenteCatastroService,
   ],
 })
 export class SriModule {}

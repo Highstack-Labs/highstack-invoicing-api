@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PoolClient } from 'pg';
 import { Decimal } from 'decimal.js';
@@ -9,6 +9,7 @@ import { SriSoapClient } from './sri-soap.client';
 import { SriRepositoryService } from './sri-repository.service';
 import { XmlStorageService } from './xml-storage.service';
 import { SriBaseService } from './sri-base.service';
+import { ContribuyenteCatastroService } from './contribuyente-catastro.service';
 import { CreateFacturaDto, FacturaResponseDto } from '../dto';
 import {
   Factura,
@@ -33,6 +34,8 @@ export class FacturaService {
     private readonly xmlStorage: XmlStorageService,
     private readonly base: SriBaseService,
     private readonly eventEmitter: EventEmitter2,
+    @Optional()
+    private readonly catastroService?: ContribuyenteCatastroService,
   ) {}
 
   /**
@@ -51,8 +54,8 @@ export class FacturaService {
         'comprador',
       );
 
-      // Ejecutar validaciones de catálogo Y búsqueda de emisor en paralelo
-      const [, , , emisor] = await Promise.all([
+      // Ejecutar validaciones de catálogo, consulta de catastro SRI Y búsqueda de emisor en paralelo
+      const [, , , emisor, catastroComprador] = await Promise.all([
         this.base.validarTipoIdentificacionCatalogo(
           dto.comprador.tipoIdentificacion,
         ),
@@ -61,7 +64,21 @@ export class FacturaService {
           ? this.base.validarFormasPagoCatalogo(dto.pagos)
           : Promise.resolve(),
         this.repository.findEmisorByRuc(dto.emisor.ruc),
+        this.catastroService
+          ? this.catastroService.validarCompradorEnEmision(
+              dto.comprador.tipoIdentificacion,
+              dto.comprador.identificacion,
+            )
+          : Promise.resolve(null),
       ]);
+
+      // Si el catastro SRI devolvió la razón social oficial y el comprador no la especificó o puso un placeholder, sincronizarla
+      if (
+        catastroComprador?.razonSocial &&
+        (!dto.comprador.razonSocial || !dto.comprador.razonSocial.trim())
+      ) {
+        dto.comprador.razonSocial = catastroComprador.razonSocial;
+      }
 
       // Variables de configuración
       const ambiente = dto.ambiente || this.base.getDefaultAmbiente();

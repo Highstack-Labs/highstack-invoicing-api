@@ -552,6 +552,28 @@ export class SriController {
     return this.sriService.verificarEnSri(claveAcceso);
   }
 
+  @Get('contribuyente/:identificacion')
+  @ApiOperation({
+    summary: 'Validar y consultar RUC o Cédula en el Catastro del SRI',
+    description:
+      'Valida matemáticamente (Módulo 10 / Módulo 11) el RUC (13 dígitos) o Cédula (10 dígitos) y consulta gratuitamente su existencia, estado y razón social en el Catastro público del SRI.',
+  })
+  @ApiParam({
+    name: 'identificacion',
+    description: 'Número de RUC (13 dígitos), Cédula (10 dígitos) o 9999999999999',
+    example: '0750138141001',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Resultado de validación y consulta en el Catastro del SRI',
+  })
+  async consultarContribuyente(
+    @Param('identificacion') identificacion: string,
+  ) {
+    this.logger.log(`GET /sri/contribuyente/${identificacion}`);
+    return this.sriService.consultarContribuyente(identificacion);
+  }
+
   @Post('sincronizar')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)

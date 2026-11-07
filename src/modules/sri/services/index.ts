@@ -12,3 +12,4 @@ export * from './retencion.service';
 export * from './guia-remision.service';
 export * from './sri-soap-factory.service';
 export * from './ride.service';
+export * from './contribuyente-catastro.service';

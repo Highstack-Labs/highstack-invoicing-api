@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { extractRucFromClaveAcceso } from './utils/clave-acceso.utils';
@@ -17,6 +17,8 @@ import {
   RetencionService,
   GuiaRemisionService,
   XmlBuilderService,
+  ContribuyenteCatastroService,
+  ConsultaContribuyenteResult,
 } from './services';
 import { SriRepositoryService } from './services/sri-repository.service';
 import { XmlStorageService } from './services/xml-storage.service';
@@ -53,6 +55,8 @@ export class SriService {
     private readonly xmlBuilder: XmlBuilderService,
     private readonly db: DatabaseService,
     @InjectQueue('sri-emision') private readonly emisionQueue: Queue,
+    @Optional()
+    private readonly catastroService?: ContribuyenteCatastroService,
   ) {}
 
   // ==========================================
@@ -736,6 +740,19 @@ export class SriService {
       estadoLocal: estadoLocal || undefined,
       sincronizado,
     };
+  }
+
+  /**
+   * Consulta y valida automáticamente un RUC (13 dígitos) o Cédula (10 dígitos)
+   * contra el algoritmo oficial (Módulo 10/11) y el Catastro público del SRI.
+   */
+  async consultarContribuyente(
+    identificacion: string,
+  ): Promise<ConsultaContribuyenteResult> {
+    if (!this.catastroService) {
+      throw new BadRequestException('Servicio de catastro SRI no disponible');
+    }
+    return this.catastroService.consultarContribuyente(identificacion);
   }
 
   /**
