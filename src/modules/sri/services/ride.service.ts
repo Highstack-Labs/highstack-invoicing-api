@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { PdfService } from '../../pdf/pdf.service';
 import { TemplateService } from '../../template/template.service';
 import { SriRepositoryService } from './sri-repository.service';
@@ -53,14 +54,464 @@ export class RideService {
       infoAdicional,
     );
 
-    const templatePath = this.templateService.findTemplate(
-      RideService.RIDE_TEMPLATE_ID,
+    try {
+      const templatePath = this.templateService.findTemplate(
+        RideService.RIDE_TEMPLATE_ID,
+      );
+
+      return await this.pdfService.generatePDF(
+        rideData as AnyRecord,
+        templatePath,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Usando generador RIDE PDF nativo (pdf-lib) para ${claveAcceso}: ${(err as Error).message}`,
+      );
+      return this.generarRidePdfNativo(rideData);
+    }
+  }
+
+  /**
+   * Genera el documento RIDE oficial del SRI directamente con pdf-lib
+   * cuando el motor Carbone o la plantilla externa no están disponibles.
+   */
+  private async generarRidePdfNativo(rideData: AnyRecord): Promise<Buffer> {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]); // A4
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontMono = await pdfDoc.embedFont(StandardFonts.Courier);
+
+    const borderColor = rgb(0.78, 0.8, 0.84);
+    const darkBg = rgb(0.95, 0.96, 0.97);
+    const textPrimary = rgb(0.09, 0.09, 0.11);
+    const textMuted = rgb(0.38, 0.4, 0.45);
+
+    const sanitize = (str: unknown): string =>
+      String(str ?? '')
+        .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
+        .trim();
+
+    // 1. Cabecera Izquierda (Datos del Emisor)
+    page.drawRectangle({
+      x: 32,
+      y: 635,
+      width: 255,
+      height: 170,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    page.drawText(sanitize(rideData.razonSocialEmisor || 'EMISOR AUTORIZADO SRI').slice(0, 38), {
+      x: 42,
+      y: 782,
+      size: 10,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    if (rideData.nombreComercial) {
+      page.drawText(sanitize(rideData.nombreComercial).slice(0, 42), {
+        x: 42,
+        y: 767,
+        size: 8.5,
+        font,
+        color: textMuted,
+      });
+    }
+
+    page.drawText(`Dir. Matriz: ${sanitize(rideData.direccionMatriz || 'Ecuador').slice(0, 36)}`, {
+      x: 42,
+      y: 742,
+      size: 8,
+      font,
+      color: textPrimary,
+    });
+
+    page.drawText(
+      `Dir. Sucursal: ${sanitize(rideData.direccionEstablecimiento || rideData.direccionMatriz || 'Ecuador').slice(0, 34)}`,
+      {
+        x: 42,
+        y: 726,
+        size: 8,
+        font,
+        color: textPrimary,
+      },
     );
 
-    return this.pdfService.generatePDF(
-      rideData as AnyRecord,
-      templatePath,
+    if (rideData.contribuyenteEspecial) {
+      page.drawText(`Contribuyente Especial Nro: ${sanitize(rideData.contribuyenteEspecial)}`, {
+        x: 42,
+        y: 706,
+        size: 8,
+        font,
+        color: textPrimary,
+      });
+    }
+
+    page.drawText(`OBLIGADO A LLEVAR CONTABILIDAD: ${sanitize(rideData.obligadoContabilidad || 'NO')}`, {
+      x: 42,
+      y: 688,
+      size: 8,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    if (rideData.contribuyenteRimpe === 'SI') {
+      page.drawText('CONTRIBUYENTE RÉGIMEN RIMPE', {
+        x: 42,
+        y: 670,
+        size: 8,
+        font: fontBold,
+        color: textMuted,
+      });
+    }
+
+    // 2. Cabecera Derecha (Ficha Fiscal SRI y Clave de Acceso)
+    page.drawRectangle({
+      x: 297,
+      y: 635,
+      width: 266,
+      height: 170,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    page.drawText(`R.U.C.: ${sanitize(rideData.rucEmisor)}`, {
+      x: 308,
+      y: 786,
+      size: 10,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    page.drawText(sanitize(rideData.tipoComprobanteDescripcion || 'FACTURA'), {
+      x: 308,
+      y: 769,
+      size: 11,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    page.drawText(`No. ${sanitize(rideData.numeroComprobante)}`, {
+      x: 308,
+      y: 753,
+      size: 9.5,
+      font: fontMono,
+      color: textPrimary,
+    });
+
+    page.drawText('NÚMERO DE AUTORIZACIÓN:', {
+      x: 308,
+      y: 736,
+      size: 7.5,
+      font: fontBold,
+      color: textMuted,
+    });
+
+    page.drawText(sanitize(rideData.numAutorizacion || rideData.claveAcceso), {
+      x: 308,
+      y: 725,
+      size: 6.4,
+      font: fontMono,
+      color: textPrimary,
+    });
+
+    page.drawText(
+      `FECHA Y HORA AUTORIZACIÓN: ${sanitize(rideData.fechaAutorizacionFormato || rideData.fechaEmisionFormato)}`,
+      {
+        x: 308,
+        y: 709,
+        size: 7.5,
+        font,
+        color: textPrimary,
+      },
     );
+
+    page.drawText(
+      `AMBIENTE: ${sanitize(rideData.ambienteDescripcion)}   |   EMISIÓN: ${sanitize(rideData.tipoEmisionDescripcion)}`,
+      {
+        x: 308,
+        y: 694,
+        size: 8,
+        font: fontBold,
+        color: textPrimary,
+      },
+    );
+
+    page.drawText(`ESTADO SRI: ${sanitize(rideData.estado || 'AUTORIZADO')}`, {
+      x: 308,
+      y: 680,
+      size: 8,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    page.drawText('CLAVE DE ACCESO:', {
+      x: 308,
+      y: 664,
+      size: 7.5,
+      font: fontBold,
+      color: textMuted,
+    });
+
+    // Líneas de código de barras simuladas para la clave de 49 dígitos
+    const claveStr = sanitize(rideData.claveAcceso);
+    for (let i = 0; i < claveStr.length; i++) {
+      const digit = Number(claveStr[i]) || 0;
+      const barWidth = digit % 2 === 0 ? 1.5 : 0.8;
+      page.drawRectangle({
+        x: 308 + i * 4.8,
+        y: 649,
+        width: barWidth,
+        height: 11,
+        color: textPrimary,
+      });
+    }
+
+    page.drawText(claveStr, {
+      x: 308,
+      y: 640,
+      size: 6.4,
+      font: fontMono,
+      color: textPrimary,
+    });
+
+    // 3. Datos del Adquirente / Comprador
+    page.drawRectangle({
+      x: 32,
+      y: 575,
+      width: 531,
+      height: 50,
+      borderColor,
+      borderWidth: 1,
+      color: darkBg,
+    });
+
+    page.drawText(
+      `Razón Social / Nombres y Apellidos: ${sanitize(rideData.razonSocialComprador).slice(0, 55)}`,
+      {
+        x: 42,
+        y: 608,
+        size: 8.5,
+        font: fontBold,
+        color: textPrimary,
+      },
+    );
+
+    page.drawText(`Identificación: ${sanitize(rideData.identificacionComprador)}`, {
+      x: 410,
+      y: 608,
+      size: 8.5,
+      font: fontMono,
+      color: textPrimary,
+    });
+
+    page.drawText(`Fecha de Emisión: ${sanitize(rideData.fechaEmisionFormato)}`, {
+      x: 42,
+      y: 588,
+      size: 8,
+      font,
+      color: textPrimary,
+    });
+
+    page.drawText(
+      `Dirección Comprador: ${sanitize(rideData.receptorDireccion || 'S/N').slice(0, 45)}`,
+      {
+        x: 230,
+        y: 588,
+        size: 8,
+        font,
+        color: textPrimary,
+      },
+    );
+
+    // 4. Tabla de Detalles
+    let yCursor = 548;
+    page.drawRectangle({
+      x: 32,
+      y: yCursor,
+      width: 531,
+      height: 20,
+      color: rgb(0.14, 0.15, 0.18),
+    });
+
+    const headerColor = rgb(1, 1, 1);
+    page.drawText('CÓDIGO', { x: 38, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+    page.drawText('CANT.', { x: 110, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+    page.drawText('DESCRIPCIÓN', { x: 155, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+    page.drawText('P. UNITARIO', { x: 390, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+    page.drawText('DESC.', { x: 458, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+    page.drawText('SUBTOTAL', { x: 505, y: yCursor + 6, size: 7.5, font: fontBold, color: headerColor });
+
+    const items = Array.isArray(rideData.detalles) && rideData.detalles.length > 0
+      ? rideData.detalles
+      : [
+          {
+            codigoPrincipal: 'SRV-001',
+            cantidadFormato: '1.00',
+            descripcion: `Comprobante Electrónico ${rideData.numeroComprobante}`,
+            precioUnitarioFormato: rideData.subtotalFormato,
+            descuentoFormato: '$0.00',
+            subtotalFormato: rideData.subtotalFormato,
+          },
+        ];
+
+    for (const item of items.slice(0, 14)) {
+      yCursor -= 20;
+      page.drawRectangle({
+        x: 32,
+        y: yCursor,
+        width: 531,
+        height: 20,
+        borderColor,
+        borderWidth: 0.5,
+      });
+
+      page.drawText(sanitize(item.codigoPrincipal || 'ITEM').slice(0, 12), {
+        x: 38,
+        y: yCursor + 6,
+        size: 7.5,
+        font: fontMono,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(item.cantidadFormato || '1.00'), {
+        x: 110,
+        y: yCursor + 6,
+        size: 7.5,
+        font: fontMono,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(item.descripcion || '').slice(0, 42), {
+        x: 155,
+        y: yCursor + 6,
+        size: 7.5,
+        font,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(item.precioUnitarioFormato || '$0.00'), {
+        x: 392,
+        y: yCursor + 6,
+        size: 7.5,
+        font: fontMono,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(item.descuentoFormato || '$0.00'), {
+        x: 458,
+        y: yCursor + 6,
+        size: 7.5,
+        font: fontMono,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(item.subtotalFormato || '$0.00'), {
+        x: 505,
+        y: yCursor + 6,
+        size: 7.5,
+        font: fontMono,
+        color: textPrimary,
+      });
+    }
+
+    // 5. Información Adicional y Resumen de Totales
+    const summaryTop = yCursor - 16;
+
+    // Caja Izquierda: Información Adicional & Forma de Pago
+    page.drawRectangle({
+      x: 32,
+      y: summaryTop - 105,
+      width: 310,
+      height: 105,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    page.drawText('INFORMACIÓN ADICIONAL Y FORMA DE PAGO', {
+      x: 42,
+      y: summaryTop - 16,
+      size: 8,
+      font: fontBold,
+      color: textPrimary,
+    });
+
+    let infoY = summaryTop - 32;
+    const infoList = Array.isArray(rideData.infoAdicional) ? rideData.infoAdicional : [];
+    for (const info of infoList.slice(0, 3)) {
+      page.drawText(`${sanitize(info.nombre)}: ${sanitize(info.valor).slice(0, 40)}`, {
+        x: 42,
+        y: infoY,
+        size: 7.5,
+        font,
+        color: textPrimary,
+      });
+      infoY -= 14;
+    }
+
+    const pagosList = Array.isArray(rideData.pagos) && rideData.pagos.length > 0
+      ? rideData.pagos
+      : [{ formaPago: '20', formaPagoDescripcion: 'OTROS CON UTILIZACIÓN DEL SISTEMA FINANCIERO', totalFormato: rideData.totalFormato }];
+
+    for (const p of pagosList.slice(0, 2)) {
+      page.drawText(
+        `Pago (${sanitize(p.formaPago)}): ${sanitize(p.formaPagoDescripcion).slice(0, 34)} - ${sanitize(p.totalFormato)}`,
+        {
+          x: 42,
+          y: infoY,
+          size: 7.5,
+          font,
+          color: textMuted,
+        },
+      );
+      infoY -= 14;
+    }
+
+    // Caja Derecha: Cuadro de Totales
+    page.drawRectangle({
+      x: 354,
+      y: summaryTop - 105,
+      width: 209,
+      height: 105,
+      borderColor,
+      borderWidth: 1,
+      color: darkBg,
+    });
+
+    const drawTotalRow = (label: string, val: string, rowY: number, bold = false) => {
+      page.drawText(label, {
+        x: 364,
+        y: rowY,
+        size: bold ? 9 : 8,
+        font: bold ? fontBold : font,
+        color: textPrimary,
+      });
+      page.drawText(sanitize(val), {
+        x: 505,
+        y: rowY,
+        size: bold ? 9 : 8,
+        font: fontMono,
+        color: textPrimary,
+      });
+    };
+
+    drawTotalRow('SUBTOTAL SIN IMPUESTOS', rideData.subtotalFormato, summaryTop - 22);
+    drawTotalRow('TOTAL DESCUENTO', rideData.totalDescuentoFormato, summaryTop - 40);
+    drawTotalRow('IVA 15%', rideData.totalImpuestosFormato, summaryTop - 58);
+    drawTotalRow('PROPINA', rideData.propinaFormato, summaryTop - 76);
+    drawTotalRow('IMPORTE TOTAL', rideData.totalFormato, summaryTop - 95, true);
+
+    // Pie de página
+    page.drawText(
+      'Representación Impresa de Comprobante Electrónico (RIDE) · Servicio de Rentas Internas del Ecuador (SRI)',
+      {
+        x: 32,
+        y: 28,
+        size: 7.5,
+        font,
+        color: textMuted,
+      },
+    );
+
+    const pdfBytes = await pdfDoc.save();
+    return Buffer.from(pdfBytes);
   }
 
   /**
