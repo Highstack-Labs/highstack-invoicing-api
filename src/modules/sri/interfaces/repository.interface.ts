@@ -45,6 +45,8 @@ export interface ComprobanteRecord {
   guia_remision?: string;
   id_referencia_externa?: string;
   tipo_sistema_externo?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
 }
 
 export interface DetalleRecord {

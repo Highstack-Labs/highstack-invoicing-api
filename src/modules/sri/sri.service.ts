@@ -445,7 +445,38 @@ export class SriService {
       return null;
     }
     // Read XML content from file
-    return this.xmlStorage.readXml(xmlPath);
+    const rawXml = await this.xmlStorage.readXml(xmlPath);
+    if (!rawXml) {
+      return null;
+    }
+    if (rawXml.includes('<autorizacion>') || rawXml.includes('<autorizacion ')) {
+      return rawXml;
+    }
+    const ambienteDesc = comprobante.ambiente === '2' ? 'PRODUCCIÓN' : 'PRUEBAS';
+    const rawFechaAuth = comprobante.fecha_autorizacion || comprobante.created_at;
+    let fechaAuthStr = '';
+    if (rawFechaAuth) {
+      const d = rawFechaAuth instanceof Date ? rawFechaAuth : new Date(rawFechaAuth);
+      if (!isNaN(d.getTime())) {
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        fechaAuthStr = `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+      } else {
+        fechaAuthStr = String(rawFechaAuth);
+      }
+    }
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<autorizacion>
+  <estado>${comprobante.estado || 'AUTORIZADO'}</estado>
+  <numeroAutorizacion>${comprobante.numero_autorizacion || comprobante.clave_acceso}</numeroAutorizacion>
+  <fechaAutorizacion>${fechaAuthStr}</fechaAutorizacion>
+  <ambiente>${ambienteDesc}</ambiente>
+  <comprobante><![CDATA[${rawXml}]]></comprobante>
+</autorizacion>`;
   }
 
   /**
